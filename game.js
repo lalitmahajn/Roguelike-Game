@@ -132,6 +132,12 @@ let player, bullets = [], enemies = [], gems = [], particles = [], damageNumbers
 let activePowerups = [];
 let currentWeaponIdx = 0;
 
+// ======================== CONTROL MODE ========================
+let controlMode = 'keyboard'; // 'keyboard' | 'touch'
+let joystick = { active: false, dx: 0, dy: 0, touchId: null };
+let touchShootDown = false;
+let touchDashDown = false;
+
 // ======================== UTILITY ========================
 const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));
@@ -140,9 +146,24 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const angle = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
 
-function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    checkOrientation();
+}
 window.addEventListener('resize', resize);
 resize();
+
+// ======================== LANDSCAPE LOCK ========================
+function checkOrientation() {
+    const lock = document.getElementById('landscape-lock');
+    if (controlMode === 'touch' && window.innerHeight > window.innerWidth && window.innerWidth < 800) {
+        lock.classList.remove('hidden');
+    } else {
+        lock.classList.add('hidden');
+    }
+}
+window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 200));
 
 // ======================== PLAYER ========================
 function createPlayer() {
@@ -156,35 +177,146 @@ function createPlayer() {
     };
 }
 
-// ======================== INPUT ========================
+// ======================== KEYBOARD / MOUSE INPUT ========================
 window.addEventListener('keydown', e => {
+    if (controlMode !== 'keyboard') return;
     keys[e.code] = true;
     if (e.code === 'Space') e.preventDefault();
-    // Weapon switching with 1-5
     if (e.code >= 'Digit1' && e.code <= 'Digit5') {
         const idx = parseInt(e.code[5]) - 1;
         if (idx >= 0 && idx < WEAPONS.length) { currentWeaponIdx = idx; ensureAudio(); }
     }
-    // Q/E cycle
     if (e.code === 'KeyQ') { currentWeaponIdx = (currentWeaponIdx - 1 + WEAPONS.length) % WEAPONS.length; }
     if (e.code === 'KeyE') { currentWeaponIdx = (currentWeaponIdx + 1) % WEAPONS.length; }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
-canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-canvas.addEventListener('mousedown', e => { mouse.down = true; ensureAudio(); e.preventDefault(); });
-canvas.addEventListener('mouseup', () => mouse.down = false);
+canvas.addEventListener('mousemove', e => { if (controlMode === 'keyboard') { mouse.x = e.clientX; mouse.y = e.clientY; } });
+canvas.addEventListener('mousedown', e => { if (controlMode === 'keyboard') { mouse.down = true; ensureAudio(); } e.preventDefault(); });
+canvas.addEventListener('mouseup', () => { if (controlMode === 'keyboard') mouse.down = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-// Scroll to switch weapons
 canvas.addEventListener('wheel', e => {
-    if (state !== 'playing') return;
+    if (state !== 'playing' || controlMode !== 'keyboard') return;
     currentWeaponIdx = (currentWeaponIdx + (e.deltaY > 0 ? 1 : -1) + WEAPONS.length) % WEAPONS.length;
     e.preventDefault();
 }, { passive: false });
 
-// Touch
-canvas.addEventListener('touchstart', e => { const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; mouse.down = true; ensureAudio(); e.preventDefault(); }, { passive: false });
-canvas.addEventListener('touchmove', e => { const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; e.preventDefault(); }, { passive: false });
-canvas.addEventListener('touchend', () => mouse.down = false);
+// ======================== TOUCH JOYSTICK & BUTTONS ========================
+const joystickBase = document.getElementById('joystick-base');
+const joystickThumb = document.getElementById('joystick-thumb');
+const joystickZone = document.getElementById('joystick-zone');
+
+function getJoystickCenter() {
+    const r = joystickBase.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+joystickZone.addEventListener('touchstart', e => {
+    if (controlMode !== 'touch') return;
+    e.preventDefault(); e.stopPropagation(); ensureAudio();
+    const t = e.changedTouches[0];
+    joystick.active = true; joystick.touchId = t.identifier;
+    updateJoystickFromTouch(t);
+    joystickThumb.classList.add('active');
+}, { passive: false });
+
+joystickZone.addEventListener('touchmove', e => {
+    if (controlMode !== 'touch') return;
+    e.preventDefault(); e.stopPropagation();
+    for (const t of e.changedTouches) {
+        if (t.identifier === joystick.touchId) updateJoystickFromTouch(t);
+    }
+}, { passive: false });
+
+joystickZone.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+        if (t.identifier === joystick.touchId) resetJoystick();
+    }
+}, { passive: false });
+joystickZone.addEventListener('touchcancel', () => resetJoystick());
+
+function updateJoystickFromTouch(t) {
+    const c = getJoystickCenter();
+    let dx = t.clientX - c.x, dy = t.clientY - c.y;
+    const maxR = 45;
+    const d = Math.hypot(dx, dy);
+    if (d > maxR) { dx = (dx / d) * maxR; dy = (dy / d) * maxR; }
+    joystick.dx = dx / maxR; joystick.dy = dy / maxR;
+    joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+
+function resetJoystick() {
+    joystick.active = false; joystick.dx = 0; joystick.dy = 0; joystick.touchId = null;
+    joystickThumb.style.transform = 'translate(-50%, -50%)';
+    joystickThumb.classList.remove('active');
+}
+
+// Touch shoot button
+const shootBtn = document.getElementById('touch-shoot-btn');
+shootBtn.addEventListener('touchstart', e => {
+    if (controlMode !== 'touch') return;
+    e.preventDefault(); e.stopPropagation(); ensureAudio();
+    touchShootDown = true; shootBtn.classList.add('active');
+}, { passive: false });
+shootBtn.addEventListener('touchend', e => {
+    e.preventDefault(); touchShootDown = false; shootBtn.classList.remove('active');
+}, { passive: false });
+shootBtn.addEventListener('touchcancel', () => { touchShootDown = false; shootBtn.classList.remove('active'); });
+
+// Touch dash button
+const dashBtn = document.getElementById('touch-dash-btn');
+dashBtn.addEventListener('touchstart', e => {
+    if (controlMode !== 'touch') return;
+    e.preventDefault(); e.stopPropagation(); ensureAudio();
+    touchDashDown = true; dashBtn.classList.add('active');
+}, { passive: false });
+dashBtn.addEventListener('touchend', e => {
+    e.preventDefault(); touchDashDown = false; dashBtn.classList.remove('active');
+}, { passive: false });
+dashBtn.addEventListener('touchcancel', () => { touchDashDown = false; dashBtn.classList.remove('active'); });
+
+// Touch weapon switcher
+document.getElementById('touch-wpn-prev').addEventListener('touchstart', e => {
+    e.preventDefault(); e.stopPropagation(); ensureAudio();
+    currentWeaponIdx = (currentWeaponIdx - 1 + WEAPONS.length) % WEAPONS.length;
+    updateTouchWeaponLabel();
+}, { passive: false });
+document.getElementById('touch-wpn-next').addEventListener('touchstart', e => {
+    e.preventDefault(); e.stopPropagation(); ensureAudio();
+    currentWeaponIdx = (currentWeaponIdx + 1) % WEAPONS.length;
+    updateTouchWeaponLabel();
+}, { passive: false });
+
+function updateTouchWeaponLabel() {
+    const el = document.getElementById('touch-wpn-name');
+    if (el) el.textContent = WEAPONS[currentWeaponIdx].name;
+}
+
+// ======================== CONTROL MODE SELECTION ========================
+const btnKeyboard = document.getElementById('btn-keyboard');
+const btnTouch = document.getElementById('btn-touch');
+btnKeyboard.classList.add('active');
+
+btnKeyboard.addEventListener('click', () => {
+    controlMode = 'keyboard';
+    btnKeyboard.classList.add('active'); btnTouch.classList.remove('active');
+    document.getElementById('keyboard-controls-info').classList.remove('hidden');
+    document.getElementById('touch-controls-info').classList.add('hidden');
+    document.body.classList.remove('touch-mode');
+    checkOrientation();
+});
+btnTouch.addEventListener('click', () => {
+    controlMode = 'touch';
+    btnTouch.classList.add('active'); btnKeyboard.classList.remove('active');
+    document.getElementById('touch-controls-info').classList.remove('hidden');
+    document.getElementById('keyboard-controls-info').classList.add('hidden');
+    document.body.classList.add('touch-mode');
+    checkOrientation();
+});
+
+// Auto-detect mobile
+if ('ontouchstart' in window && window.innerWidth < 1024) {
+    btnTouch.click();
+}
 
 // ======================== START / RESTART ========================
 document.getElementById('start-btn').addEventListener('click', () => { ensureAudio(); startGame(); });
@@ -197,6 +329,9 @@ function startGame() {
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('gameover-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
+    if (controlMode === 'touch') document.getElementById('touch-controls').classList.remove('hidden');
+    else document.getElementById('touch-controls').classList.add('hidden');
+    updateTouchWeaponLabel();
     state = 'playing';
 }
 
@@ -246,31 +381,38 @@ function spawnDamageNumber(x, y, text, color) {
 }
 
 // ======================== BULLETS / WEAPONS ========================
+function getAimAngle() {
+    if (controlMode === 'touch') {
+        // Auto-aim: find nearest enemy
+        let nearest = null, nd = Infinity;
+        for (const e of enemies) {
+            const d = dist(player, e);
+            if (d < nd) { nd = d; nearest = e; }
+        }
+        if (nearest) return angle(player, nearest);
+        // If no enemies, aim in movement direction or default right
+        if (joystick.active && (joystick.dx || joystick.dy)) return Math.atan2(joystick.dy, joystick.dx);
+        return player.angle;
+    }
+    const worldMouse = { x: mouse.x - W / 2 + camera.x, y: mouse.y - H / 2 + camera.y };
+    return angle(player, worldMouse);
+}
+
 function fireBullet() {
     const w = WEAPONS[currentWeaponIdx];
-    const worldMouse = { x: mouse.x - W / 2 + camera.x, y: mouse.y - H / 2 + camera.y };
-    const baseAngle = angle(player, worldMouse);
+    const baseAngle = getAimAngle();
 
     for (let i = 0; i < w.count; i++) {
         let a = baseAngle;
         if (w.count > 1) {
-            // Spread evenly for shotgun, etc.
             a = baseAngle - w.spread / 2 + (w.spread / (w.count - 1)) * i + rand(-0.03, 0.03);
         } else if (w.spread > 0) {
             a += rand(-w.spread, w.spread);
         }
-        // Multi-shot power-up adds extra bullets
         if (player.multiShot && w.count === 1) {
-            if (i === 0) {
-                pushBullet(a, w);
-                pushBullet(a - 0.18, w);
-                pushBullet(a + 0.18, w);
-            }
-        } else {
-            pushBullet(a, w);
-        }
+            if (i === 0) { pushBullet(a, w); pushBullet(a - 0.18, w); pushBullet(a + 0.18, w); }
+        } else { pushBullet(a, w); }
     }
-    // Play weapon sound
     if (sfx[w.id]) sfx[w.id]();
 }
 
@@ -286,21 +428,27 @@ function pushBullet(a, w) {
 
 function updatePlayer(dt) {
     let mx = 0, my = 0;
-    if (keys['KeyW'] || keys['ArrowUp']) my = -1;
-    if (keys['KeyS'] || keys['ArrowDown']) my = 1;
-    if (keys['KeyA'] || keys['ArrowLeft']) mx = -1;
-    if (keys['KeyD'] || keys['ArrowRight']) mx = 1;
+    if (controlMode === 'touch') {
+        mx = joystick.dx; my = joystick.dy;
+    } else {
+        if (keys['KeyW'] || keys['ArrowUp']) my = -1;
+        if (keys['KeyS'] || keys['ArrowDown']) my = 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) mx = -1;
+        if (keys['KeyD'] || keys['ArrowRight']) mx = 1;
+    }
     const len = Math.hypot(mx, my) || 1;
     mx /= len; my /= len;
     const speed = PLAYER_SPEED * player.speedMult;
 
     // Dash
+    const dashPressed = controlMode === 'touch' ? touchDashDown : keys['Space'];
     player.dashCooldown -= dt;
-    if (keys['Space'] && player.dashCooldown <= 0 && (mx || my)) {
+    if (dashPressed && player.dashCooldown <= 0 && (mx || my)) {
         player.dashTimer = DASH_DURATION; player.dashCooldown = DASH_COOLDOWN;
         player.dashAngle = Math.atan2(my, mx);
         spawnParticles(player.x, player.y, '#00ffff', 8, 150, 0.3);
         sfx.dash();
+        if (controlMode === 'touch') touchDashDown = false;
     }
     if (player.dashTimer > 0) {
         player.dashTimer -= dt;
@@ -313,13 +461,13 @@ function updatePlayer(dt) {
     player.y = clamp(player.y, 20, WORLD_SIZE - 20);
 
     // Aim
-    const worldMouse = { x: mouse.x - W / 2 + camera.x, y: mouse.y - H / 2 + camera.y };
-    player.angle = angle(player, worldMouse);
+    player.angle = getAimAngle();
 
     // Shoot
+    const shooting = controlMode === 'touch' ? touchShootDown : mouse.down;
     const w = WEAPONS[currentWeaponIdx];
     player.fireTimer -= dt;
-    if (mouse.down && player.fireTimer <= 0) {
+    if (shooting && player.fireTimer <= 0) {
         player.fireTimer = w.fireRate / player.fireRateMult;
         fireBullet();
     }
@@ -518,12 +666,14 @@ function gameOver() {
     state = 'gameover';
     sfx.gameover();
     document.getElementById('hud').classList.add('hidden');
+    document.getElementById('touch-controls').classList.add('hidden');
     document.getElementById('gameover-screen').classList.remove('hidden');
     document.getElementById('final-score').textContent = player.score;
     document.getElementById('final-kills').textContent = player.kills;
     document.getElementById('final-gems').textContent = player.gems;
     document.getElementById('final-time').textContent = formatTime(gameTime);
     document.getElementById('final-wave').textContent = waveNum;
+    resetJoystick(); touchShootDown = false; touchDashDown = false;
 }
 
 function formatTime(t) {
@@ -721,6 +871,7 @@ function drawMinimap() {
 }
 
 function drawCrosshair() {
+    if (controlMode === 'touch') return;
     const w = WEAPONS[currentWeaponIdx];
     ctx.strokeStyle = w.color + '88'; ctx.lineWidth = 1.5;
     const cx = mouse.x, cy = mouse.y, s = 12, g = 5;

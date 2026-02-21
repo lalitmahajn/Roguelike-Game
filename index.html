@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Neon Survivors — Roguelike Shooter</title>
     <meta name="description"
         content="A fast-paced 2D top-down roguelike survivor game. Fight waves of enemies, collect gems, and power up to survive!">
@@ -17,6 +17,15 @@
 
 <body>
     <canvas id="gameCanvas"></canvas>
+
+    <!-- Landscape Lock Overlay (mobile portrait) -->
+    <div id="landscape-lock" class="hidden">
+        <div class="landscape-content">
+            <div class="rotate-icon">📱↻</div>
+            <h2>Rotate Your Device</h2>
+            <p>Please switch to <strong>landscape mode</strong> for the best experience.</p>
+        </div>
+    </div>
 
     <!-- HUD Overlay -->
     <div id="hud" class="hidden">
@@ -56,12 +65,55 @@
         </div>
     </div>
 
+    <!-- Touch Controls Overlay (only visible in touch mode) -->
+    <div id="touch-controls" class="hidden">
+        <!-- Virtual Joystick (left side) -->
+        <div id="joystick-zone">
+            <div id="joystick-base">
+                <div id="joystick-thumb"></div>
+            </div>
+        </div>
+
+        <!-- Right Side: Shoot + Dash + Weapon Switch -->
+        <div id="touch-right-zone">
+            <button id="touch-shoot-btn" class="touch-btn shoot-btn">
+                <span class="touch-btn-icon">🔫</span>
+                <span class="touch-btn-label">SHOOT</span>
+            </button>
+            <button id="touch-dash-btn" class="touch-btn dash-btn">
+                <span class="touch-btn-icon">💨</span>
+                <span class="touch-btn-label">DASH</span>
+            </button>
+            <div id="touch-weapon-switcher">
+                <button id="touch-wpn-prev" class="touch-btn wpn-btn">◀</button>
+                <span id="touch-wpn-name" class="wpn-name-label">Pistol</span>
+                <button id="touch-wpn-next" class="touch-btn wpn-btn">▶</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Start Screen -->
     <div id="start-screen">
         <div class="screen-content">
             <h1 class="game-title">NEON<br><span class="title-accent">SURVIVORS</span></h1>
             <p class="game-subtitle">Top-Down Roguelike Shooter</p>
-            <div class="controls-info">
+
+            <!-- Control Mode Selection -->
+            <div class="control-select">
+                <p class="select-label">SELECT CONTROLS</p>
+                <div class="control-btns">
+                    <button id="btn-keyboard" class="neon-btn control-mode-btn">
+                        <span class="mode-icon">⌨️</span>
+                        <span class="mode-label">Keyboard & Mouse</span>
+                    </button>
+                    <button id="btn-touch" class="neon-btn control-mode-btn">
+                        <span class="mode-icon">👆</span>
+                        <span class="mode-label">Touch Controls</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="keyboard-controls-info" class="controls-info">
                 <div class="control-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span>Move</span></div>
                 <div class="control-row"><span class="mouse-icon">🖱️</span> <span>Aim & Shoot</span></div>
                 <div class="control-row"><kbd>SPACE</kbd> <span>Dash</span></div>
@@ -70,6 +122,13 @@
                 <div class="control-row"><kbd>Q</kbd><kbd>E</kbd> / <span>🖱️ Scroll</span> <span>Cycle Weapons</span>
                 </div>
             </div>
+            <div id="touch-controls-info" class="controls-info hidden">
+                <div class="control-row">🕹️ <span>Left joystick to move</span></div>
+                <div class="control-row">🔫 <span>Right button to shoot (auto-aim)</span></div>
+                <div class="control-row">💨 <span>Dash button for quick dodge</span></div>
+                <div class="control-row">◀ ▶ <span>Switch weapons</span></div>
+            </div>
+
             <button id="start-btn" class="neon-btn">START GAME</button>
             <p class="start-hint">Survive the endless waves. Collect gems. Power up. Dominate.</p>
         </div>
