@@ -316,10 +316,12 @@ function startGame() {
     document.getElementById('hud').classList.remove('hidden');
     if (controlMode === 'touch') document.getElementById('touch-controls').classList.remove('hidden');
     else document.getElementById('touch-controls').classList.add('hidden');
-    // Request fullscreen
-    const el = document.documentElement;
-    const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-    if (rfs) try { const p = rfs.call(el); if (p && p.catch) p.catch(() => { }); } catch (e) { }
+    // Request fullscreen (touch mode only)
+    if (controlMode === 'touch') {
+        const el = document.documentElement;
+        const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (rfs) try { const p = rfs.call(el); if (p && p.catch) p.catch(() => { }); } catch (e) { }
+    }
     state = 'playing';
 }
 
@@ -356,7 +358,9 @@ function updateSpawner(dt) {
 
 // ======================== PARTICLES ========================
 function spawnParticles(x, y, color, count, speed, life) {
+    const MAX_PARTICLES = 200;
     for (let i = 0; i < count; i++) {
+        if (particles.length >= MAX_PARTICLES) break;
         const a = rand(0, Math.PI * 2), s = rand(speed * 0.3, speed);
         particles.push({
             x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
@@ -365,6 +369,7 @@ function spawnParticles(x, y, color, count, speed, life) {
     }
 }
 function spawnDamageNumber(x, y, text, color) {
+    if (damageNumbers.length >= 30) damageNumbers.shift();
     damageNumbers.push({ x, y, text: String(text), color, life: 0.8, maxLife: 0.8 });
 }
 
@@ -781,7 +786,7 @@ function drawPlayer() {
     ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
     ctx.fillStyle = '#aaffff'; ctx.beginPath(); ctx.arc(4, 0, 3, 0, Math.PI * 2); ctx.fill();
     // Draw weapon indicator on ship
-    const w = WEAPONS[currentWeaponIdx];
+    const w = getCurrentWeapon();
     ctx.fillStyle = w.color; ctx.globalAlpha = 0.8;
     ctx.beginPath(); ctx.arc(14, 0, 2, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
@@ -794,7 +799,7 @@ function drawEnemies() {
         if (p.x < -50 || p.x > W + 50 || p.y < -50 || p.y > H + 50) continue;
         const def = ENEMY_TYPES[e.type];
         const color = e.flashTimer > 0 ? '#ffffff' : def.color;
-        ctx.save(); ctx.translate(p.x, p.y); ctx.shadowColor = color; ctx.shadowBlur = 12;
+        ctx.save(); ctx.translate(p.x, p.y);
         if (e.type === 'chaser') {
             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, e.size, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, 0, e.size * 0.45, 0, Math.PI * 2); ctx.fill();
@@ -809,7 +814,7 @@ function drawEnemies() {
             ctx.fillStyle = color; drawHex(ctx, 0, 0, e.size); ctx.fill();
             ctx.fillStyle = 'rgba(0,0,0,0.3)'; drawHex(ctx, 0, 0, e.size * 0.55); ctx.fill();
             if (e.hp < e.maxHp) {
-                ctx.shadowBlur = 0; const bw = e.size * 2;
+                const bw = e.size * 2;
                 ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-bw / 2, -e.size - 10, bw, 4);
                 ctx.fillStyle = color; ctx.fillRect(-bw / 2, -e.size - 10, bw * (e.hp / e.maxHp), 4);
             }
@@ -836,10 +841,8 @@ function drawBullets() {
     for (const b of bullets) {
         const p = toScreen(b.x, b.y);
         if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) continue;
-        ctx.shadowColor = b.color; ctx.shadowBlur = 10;
 
         if (b.weaponId === 'laser') {
-            // Laser: long thin line
             ctx.strokeStyle = b.color; ctx.lineWidth = 3; ctx.globalAlpha = 0.9;
             const len = 18;
             const nx = b.vx / Math.hypot(b.vx, b.vy), ny = b.vy / Math.hypot(b.vx, b.vy);
@@ -847,27 +850,23 @@ function drawBullets() {
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(p.x - nx * len, p.y - ny * len); ctx.lineTo(p.x + nx * 4, p.y + ny * 4); ctx.stroke();
             ctx.globalAlpha = 1;
-        } else if (b.weaponId === 'rocket') {
-            // Rocket: larger with trail
+        } else if (b.weaponId === 'missiles') {
             ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(p.x, p.y, b.size, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, b.size * 0.5, 0, Math.PI * 2); ctx.fill();
-            // Trail
             ctx.fillStyle = 'rgba(255,100,0,0.3)';
-            for (let t = 1; t <= 3; t++) {
+            for (let t = 1; t <= 2; t++) {
                 ctx.beginPath();
-                ctx.arc(p.x - b.vx * 0.005 * t + rand(-3, 3), p.y - b.vy * 0.005 * t + rand(-3, 3), b.size * 0.6, 0, Math.PI * 2);
+                ctx.arc(p.x - b.vx * 0.005 * t, p.y - b.vy * 0.005 * t, b.size * 0.5, 0, Math.PI * 2);
                 ctx.fill();
             }
-        } else if (b.weaponId === 'shotgun') {
+        } else if (b.weaponId === 'bombs') {
             ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(p.x, p.y, b.size, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, b.size * 0.4, 0, Math.PI * 2); ctx.fill();
         } else {
-            // Default bullet
+            // SMG bullet — simple fast draw
             ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(p.x, p.y, b.size, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.beginPath(); ctx.arc(p.x - b.vx * 0.008, p.y - b.vy * 0.008, b.size + 2, 0, Math.PI * 2); ctx.fill();
         }
     }
-    ctx.shadowBlur = 0;
 }
 
 function drawGems() {
@@ -875,23 +874,21 @@ function drawGems() {
         const p = toScreen(g.x, g.y);
         if (p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) continue;
         const bob = Math.sin(g.bobPhase) * 3, color = GEM_COLORS[g.type], fade = g.life < 5 ? g.life / 5 : 1;
-        ctx.save(); ctx.translate(p.x, p.y + bob); ctx.globalAlpha = fade;
-        ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.fillStyle = color;
-        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(6, 0); ctx.lineTo(0, 7); ctx.lineTo(-6, 0);
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y + bob - 7); ctx.lineTo(p.x + 6, p.y + bob); ctx.lineTo(p.x, p.y + bob + 7); ctx.lineTo(p.x - 6, p.y + bob);
         ctx.closePath(); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(6, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
-        if (g.sparkle > 0.5) {
-            g.sparkle = 0; ctx.fillStyle = 'rgba(255,255,255,0.8)';
-            ctx.beginPath(); ctx.arc(rand(-4, 4), rand(-4, 4), 1.5, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.restore();
+        ctx.beginPath(); ctx.moveTo(p.x, p.y + bob - 7); ctx.lineTo(p.x + 6, p.y + bob); ctx.lineTo(p.x, p.y + bob); ctx.closePath(); ctx.fill();
     }
+    ctx.globalAlpha = 1;
 }
 
 function drawParticles() {
     for (const p of particles) {
-        const s = toScreen(p.x, p.y); const alpha = p.life / p.maxLife;
+        const s = toScreen(p.x, p.y);
+        if (s.x < -10 || s.x > W + 10 || s.y < -10 || s.y > H + 10) continue;
+        const alpha = p.life / p.maxLife;
         ctx.globalAlpha = alpha; ctx.fillStyle = p.color;
         ctx.beginPath(); ctx.arc(s.x, s.y, p.size * alpha, 0, Math.PI * 2); ctx.fill();
     }
