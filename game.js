@@ -12,6 +12,8 @@ if (versionDisplayEl) versionDisplayEl.innerText = GAME_VERSION;
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+let zoomScale = 1.0;
+
 // ======================== AUDIO ENGINE ========================
 let audioCtx = null;
 function ensureAudio() {
@@ -174,6 +176,16 @@ const angle = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
 function resize() {
     W = canvas.width = window.innerWidth;
     H = canvas.height = window.innerHeight;
+
+    // Zoom out on small screens (like mobile landscape)
+    if (H < 450 || W < 800) {
+        zoomScale = Math.min(W / 800, H / 450);
+        // clamp zoomScale between 0.6 and 1.0 to prevent it getting too tiny
+        zoomScale = clamp(zoomScale, 0.6, 1.0);
+    } else {
+        zoomScale = 1.0;
+    }
+
     checkOrientation();
 }
 window.addEventListener('resize', resize);
@@ -446,7 +458,7 @@ function getAimAngle() {
         if (joystick.active && (joystick.dx || joystick.dy)) return Math.atan2(joystick.dy, joystick.dx);
         return player.angle;
     }
-    const worldMouse = { x: mouse.x - W / 2 + camera.x, y: mouse.y - H / 2 + camera.y };
+    const worldMouse = { x: (mouse.x - W / 2) / zoomScale + camera.x, y: (mouse.y - H / 2) / zoomScale + camera.y };
     return angle(player, worldMouse);
 }
 
@@ -907,17 +919,31 @@ function showLevelUp(text) {
 
 // ======================== DRAWING ========================
 function toScreen(wx, wy) {
-    return { x: wx - camera.x + W / 2 + screenShake.x, y: wy - camera.y + H / 2 + screenShake.y };
+    // Because we use ctx.scale globally, toScreen only needs to translate
+    // world coords relative to camera, and add W/2 / zoomScale to center on screen.
+    return {
+        x: (wx - camera.x) + (W / 2) / zoomScale + screenShake.x / zoomScale,
+        y: (wy - camera.y) + (H / 2) / zoomScale + screenShake.y / zoomScale
+    };
 }
 
 function drawBackground() {
     ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.scale(zoomScale, zoomScale);
+
     const gridSize = 80;
-    const ox = (-camera.x % gridSize + gridSize) % gridSize + screenShake.x;
-    const oy = (-camera.y % gridSize + gridSize) % gridSize + screenShake.y;
+    const ox = (-camera.x % gridSize + gridSize) % gridSize + screenShake.x / zoomScale;
+    const oy = (-camera.y % gridSize + gridSize) % gridSize + screenShake.y / zoomScale;
     ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
-    for (let x = ox; x < W; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = oy; y < H; y += gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    // Draw grid lines taking into account the screen is virtually larger because of zoomScale
+    const vw = W / zoomScale;
+    const vh = H / zoomScale;
+
+    for (let x = ox; x < vw; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, vh); ctx.stroke(); }
+    for (let y = oy; y < vh; y += gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(vw, y); ctx.stroke(); }
     const tl = toScreen(0, 0), br = toScreen(WORLD_SIZE, WORLD_SIZE);
     ctx.strokeStyle = 'rgba(255,0,100,0.3)'; ctx.lineWidth = 3;
     ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
@@ -925,10 +951,12 @@ function drawBackground() {
     for (let i = 0; i < 60; i++) {
         const dx = ((42 * (i + 1) * 7919) % WORLD_SIZE), dy = ((42 * (i + 1) * 6271) % WORLD_SIZE);
         const p = toScreen(dx, dy);
-        if (p.x > -10 && p.x < W + 10 && p.y > -10 && p.y < H + 10) {
+        if (p.x > -10 && p.x < vw + 10 && p.y > -10 && p.y < vh + 10) {
             ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2); ctx.fill();
         }
     }
+
+    ctx.restore();
 }
 
 function drawPlayer() {
@@ -1076,15 +1104,15 @@ function drawMinimap() {
     for (const g of gems) ctx.fillRect(mmX + g.x * scale, mmY + g.y * scale, 1.5, 1.5);
     ctx.fillStyle = '#00ffff'; ctx.beginPath();
     ctx.arc(mmX + player.x * scale, mmY + player.y * scale, 3, 0, Math.PI * 2); ctx.fill();
-    const vx = mmX + (camera.x - W / 2) * scale, vy = mmY + (camera.y - H / 2) * scale;
-    ctx.strokeStyle = 'rgba(0,255,255,0.3)'; ctx.strokeRect(vx, vy, W * scale, H * scale);
+    const vx = mmX + (camera.x - (W / 2) / zoomScale) * scale, vy = mmY + (camera.y - (H / 2) / zoomScale) * scale;
+    ctx.strokeStyle = 'rgba(0,255,255,0.3)'; ctx.strokeRect(vx, vy, (W / zoomScale) * scale, (H / zoomScale) * scale);
 }
 
 function drawCrosshair() {
     if (controlMode === 'touch') return;
     const w = getCurrentWeapon();
     ctx.strokeStyle = w.color + '88'; ctx.lineWidth = 1.5;
-    const cx = mouse.x, cy = mouse.y, s = 12, g = 5;
+    const cx = mouse.x / zoomScale, cy = mouse.y / zoomScale, s = 12, g = 5;
     ctx.beginPath();
     ctx.moveTo(cx - s, cy); ctx.lineTo(cx - g, cy);
     ctx.moveTo(cx + g, cy); ctx.lineTo(cx + s, cy);
@@ -1260,11 +1288,18 @@ function gameLoop(timestamp) {
     }
 
     drawBackground();
+
+    ctx.save();
+    ctx.scale(zoomScale, zoomScale);
+
     if (state === 'playing' || state === 'levelup' || state === 'gameover') {
         drawWeaponPickups(); drawGems(); drawBullets(); drawEnemies(); drawPlayer();
         drawParticles(); drawMinimap(); drawCrosshair(); drawWeaponBar();
         drawCombo(); drawSpawnWarnings();
     }
+
+    ctx.restore();
+
     if (state !== 'menu') updateHUD();
     if (state === 'menu') drawMenuDecor();
 }
