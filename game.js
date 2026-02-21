@@ -75,31 +75,33 @@ const PLAYER_MAX_HP = 100;
 const PLAYER_LIVES = 5;
 const INVULN_TIME = 1.5;
 
-// ======================== WEAPONS ========================
-const WEAPONS = [
+// ======================== DEFAULT WEAPON (SMG) ========================
+const SMG = {
+    id: 'smg', name: 'SMG', icon: '�', color: '#ffdd00', fireRate: 0.08, bulletSpeed: 550, damage: 0.5,
+    spread: 0.12, count: 1, lifetime: 0.8, bulletSize: 2.5, pierce: false, explosive: false
+};
+
+// ======================== WEAPON POWER-UPS ========================
+const WEAPON_POWERUPS = [
     {
-        id: 'pistol', name: 'Pistol', icon: '🔫', color: '#00ffff', fireRate: 0.25, bulletSpeed: 600, damage: 1,
-        spread: 0, count: 1, lifetime: 1.2, bulletSize: 3.5, pierce: false, explosive: false, key: '1'
+        id: 'missiles', name: 'Missiles', icon: '�', color: '#ff3344', dur: 8,
+        fireRate: 0.3, bulletSpeed: 400, damage: 2, spread: 0.3, count: 3, lifetime: 2.0,
+        bulletSize: 4, pierce: false, explosive: true, homing: true
     },
     {
-        id: 'shotgun', name: 'Shotgun', icon: '💥', color: '#ff8844', fireRate: 0.6, bulletSpeed: 500, damage: 1,
-        spread: 0.35, count: 6, lifetime: 0.5, bulletSize: 2.5, pierce: false, explosive: false, key: '2'
+        id: 'laser', name: 'Laser Beam', icon: '⚡', color: '#aa66ff', dur: 8,
+        fireRate: 0.05, bulletSpeed: 2000, damage: 0.6, spread: 0, count: 1, lifetime: 0.6,
+        bulletSize: 3, pierce: true, explosive: false, homing: false
     },
     {
-        id: 'smg', name: 'SMG', icon: '🔥', color: '#ffdd00', fireRate: 0.08, bulletSpeed: 550, damage: 0.5,
-        spread: 0.12, count: 1, lifetime: 0.8, bulletSize: 2.5, pierce: false, explosive: false, key: '3'
-    },
-    {
-        id: 'laser', name: 'Laser Rifle', icon: '⚡', color: '#aa66ff', fireRate: 0.35, bulletSpeed: 1200, damage: 2,
-        spread: 0, count: 1, lifetime: 0.8, bulletSize: 2, pierce: true, explosive: false, key: '4'
-    },
-    {
-        id: 'rocket', name: 'Rocket', icon: '🚀', color: '#ff3344', fireRate: 0.9, bulletSpeed: 350, damage: 3,
-        spread: 0, count: 1, lifetime: 1.8, bulletSize: 5, pierce: false, explosive: true, key: '5'
+        id: 'bombs', name: 'Bombs', icon: '�', color: '#ff8800', dur: 8,
+        fireRate: 0.4, bulletSpeed: 450, damage: 1, spread: 0.08, count: 1, lifetime: 1.5,
+        bulletSize: 6, pierce: false, explosive: true, homing: false
     },
 ];
+const WEAPON_DROP_CHANCE = 0.08; // 8% per kill
 
-// Power-up thresholds
+// Power-up thresholds (stat boosts)
 const POWERUPS = [
     { gems: 25, type: 'speed', name: 'Speed Boost', icon: '💨', dur: 12, color: '#00ff88' },
     { gems: 50, type: 'rapid', name: 'Rapid Fire', icon: '🔥', dur: 12, color: '#ff6600' },
@@ -130,7 +132,8 @@ let mouse = { x: 0, y: 0, down: false };
 
 let player, bullets = [], enemies = [], gems = [], particles = [], damageNumbers = [];
 let activePowerups = [];
-let currentWeaponIdx = 0;
+let weaponPickups = []; // on-ground weapon power-up items
+let activeWeaponPU = null; // { id, name, icon, color, timer, ... weapon stats }
 
 // ======================== CONTROL MODE ========================
 let controlMode = 'keyboard'; // 'keyboard' | 'touch'
@@ -186,23 +189,14 @@ window.addEventListener('keydown', e => {
     if (controlMode !== 'keyboard') return;
     keys[e.code] = true;
     if (e.code === 'Space') e.preventDefault();
-    if (e.code >= 'Digit1' && e.code <= 'Digit5') {
-        const idx = parseInt(e.code[5]) - 1;
-        if (idx >= 0 && idx < WEAPONS.length) { currentWeaponIdx = idx; ensureAudio(); }
-    }
-    if (e.code === 'KeyQ') { currentWeaponIdx = (currentWeaponIdx - 1 + WEAPONS.length) % WEAPONS.length; }
-    if (e.code === 'KeyE') { currentWeaponIdx = (currentWeaponIdx + 1) % WEAPONS.length; }
+
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 canvas.addEventListener('mousemove', e => { if (controlMode === 'keyboard') { mouse.x = e.clientX; mouse.y = e.clientY; } });
 canvas.addEventListener('mousedown', e => { if (controlMode === 'keyboard') { mouse.down = true; ensureAudio(); } e.preventDefault(); });
 canvas.addEventListener('mouseup', () => { if (controlMode === 'keyboard') mouse.down = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('wheel', e => {
-    if (state !== 'playing' || controlMode !== 'keyboard') return;
-    currentWeaponIdx = (currentWeaponIdx + (e.deltaY > 0 ? 1 : -1) + WEAPONS.length) % WEAPONS.length;
-    e.preventDefault();
-}, { passive: false });
+
 
 // ======================== TOUCH JOYSTICK & BUTTONS ========================
 const joystickBase = document.getElementById('joystick-base');
@@ -278,22 +272,7 @@ dashBtn.addEventListener('touchend', e => {
 }, { passive: false });
 dashBtn.addEventListener('touchcancel', () => { touchDashDown = false; dashBtn.classList.remove('active'); });
 
-// Touch weapon switcher
-document.getElementById('touch-wpn-prev').addEventListener('touchstart', e => {
-    e.preventDefault(); e.stopPropagation(); ensureAudio();
-    currentWeaponIdx = (currentWeaponIdx - 1 + WEAPONS.length) % WEAPONS.length;
-    updateTouchWeaponLabel();
-}, { passive: false });
-document.getElementById('touch-wpn-next').addEventListener('touchstart', e => {
-    e.preventDefault(); e.stopPropagation(); ensureAudio();
-    currentWeaponIdx = (currentWeaponIdx + 1) % WEAPONS.length;
-    updateTouchWeaponLabel();
-}, { passive: false });
 
-function updateTouchWeaponLabel() {
-    const el = document.getElementById('touch-wpn-name');
-    if (el) el.textContent = WEAPONS[currentWeaponIdx].name;
-}
 
 // ======================== CONTROL MODE SELECTION ========================
 const btnKeyboard = document.getElementById('btn-keyboard');
@@ -330,13 +309,13 @@ document.getElementById('restart-btn').addEventListener('click', () => { ensureA
 function startGame() {
     player = createPlayer();
     bullets = []; enemies = []; gems = []; particles = []; damageNumbers = []; activePowerups = [];
-    gameTime = 0; spawnTimer = 0; waveNum = 1; waveTimer = 0; currentWeaponIdx = 0;
+    weaponPickups = []; activeWeaponPU = null;
+    gameTime = 0; spawnTimer = 0; waveNum = 1; waveTimer = 0;
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('gameover-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
     if (controlMode === 'touch') document.getElementById('touch-controls').classList.remove('hidden');
     else document.getElementById('touch-controls').classList.add('hidden');
-    updateTouchWeaponLabel();
     // Request fullscreen
     const el = document.documentElement;
     const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
@@ -407,8 +386,12 @@ function getAimAngle() {
     return angle(player, worldMouse);
 }
 
+function getCurrentWeapon() {
+    return activeWeaponPU || SMG;
+}
+
 function fireBullet() {
-    const w = WEAPONS[currentWeaponIdx];
+    const w = getCurrentWeapon();
     const baseAngle = getAimAngle();
 
     for (let i = 0; i < w.count; i++) {
@@ -422,7 +405,10 @@ function fireBullet() {
             if (i === 0) { pushBullet(a, w); pushBullet(a - 0.18, w); pushBullet(a + 0.18, w); }
         } else { pushBullet(a, w); }
     }
-    if (sfx[w.id]) sfx[w.id]();
+    if (w.id === 'missiles') sfx.rocket();
+    else if (w.id === 'laser') sfx.laser();
+    else if (w.id === 'bombs') { sfx.shotgun(); }
+    else sfx.smg();
 }
 
 function pushBullet(a, w) {
@@ -430,7 +416,8 @@ function pushBullet(a, w) {
         x: player.x + Math.cos(a) * 22, y: player.y + Math.sin(a) * 22,
         vx: Math.cos(a) * w.bulletSpeed, vy: Math.sin(a) * w.bulletSpeed,
         life: w.lifetime, dmg: w.damage, size: w.bulletSize,
-        pierce: w.pierce, explosive: w.explosive, weaponId: w.id,
+        pierce: w.pierce || false, explosive: w.explosive || false,
+        homing: w.homing || false, weaponId: w.id,
         color: w.color, hitEnemies: [],
     });
 }
@@ -474,7 +461,7 @@ function updatePlayer(dt) {
 
     // Shoot
     const shooting = controlMode === 'touch' ? touchShootDown : mouse.down;
-    const w = WEAPONS[currentWeaponIdx];
+    const w = getCurrentWeapon();
     player.fireTimer -= dt;
     if (shooting && player.fireTimer <= 0) {
         player.fireTimer = w.fireRate / player.fireRateMult;
@@ -486,6 +473,22 @@ function updatePlayer(dt) {
 function updateBullets(dt) {
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
+        // Homing missiles track nearest enemy
+        if (b.homing) {
+            let nearest = null, nd = Infinity;
+            for (const e of enemies) { const d = dist(b, e); if (d < nd && !b.hitEnemies.includes(enemies.indexOf(e))) { nd = d; nearest = e; } }
+            if (nearest && nd < 400) {
+                const target = angle(b, nearest);
+                const current = Math.atan2(b.vy, b.vx);
+                let diff = target - current;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                const turn = Math.min(Math.abs(diff), 4 * dt) * Math.sign(diff);
+                const newA = current + turn;
+                const spd = Math.hypot(b.vx, b.vy);
+                b.vx = Math.cos(newA) * spd; b.vy = Math.sin(newA) * spd;
+            }
+        }
         b.x += b.vx * dt; b.y += b.vy * dt;
         b.life -= dt;
         if (b.life <= 0 || b.x < 0 || b.x > WORLD_SIZE || b.y < 0 || b.y > WORLD_SIZE) {
@@ -541,6 +544,14 @@ function killEnemy(idx) {
         x: e.x + rand(-10, 10), y: e.y + rand(-10, 10), type: def.gemType, life: 30,
         bobPhase: rand(0, Math.PI * 2), sparkle: 0
     });
+    // Chance to drop weapon power-up
+    if (Math.random() < WEAPON_DROP_CHANCE && !activeWeaponPU) {
+        const wp = WEAPON_POWERUPS[randInt(0, WEAPON_POWERUPS.length - 1)];
+        weaponPickups.push({
+            x: e.x, y: e.y, wpDef: wp, life: 15,
+            bobPhase: rand(0, Math.PI * 2)
+        });
+    }
     if (e.type === 'splitter') {
         for (let k = 0; k < 2; k++) spawnEnemy('chaser', e.x + rand(-30, 30), e.y + rand(-30, 30));
     }
@@ -648,6 +659,35 @@ function updatePowerups(dt) {
     for (let i = activePowerups.length - 1; i >= 0; i--) {
         const p = activePowerups[i]; p.timer -= dt;
         if (p.timer <= 0) { applyPowerup(p.type, false); activePowerups.splice(i, 1); }
+    }
+    // Weapon power-up timer
+    if (activeWeaponPU) {
+        activeWeaponPU.timer -= dt;
+        if (activeWeaponPU.timer <= 0) {
+            showLevelUp('SMG Restored');
+            activeWeaponPU = null;
+        }
+    }
+    // Weapon pickup collection
+    for (let i = weaponPickups.length - 1; i >= 0; i--) {
+        const wp = weaponPickups[i];
+        wp.life -= dt; wp.bobPhase += dt * 3;
+        if (wp.life <= 0) { weaponPickups.splice(i, 1); continue; }
+        if (dist(wp, player) < 35) {
+            const def = wp.wpDef;
+            activeWeaponPU = {
+                id: def.id, name: def.name, icon: def.icon, color: def.color,
+                timer: def.dur, maxTimer: def.dur,
+                fireRate: def.fireRate, bulletSpeed: def.bulletSpeed, damage: def.damage,
+                spread: def.spread, count: def.count, lifetime: def.lifetime,
+                bulletSize: def.bulletSize, pierce: def.pierce, explosive: def.explosive,
+                homing: def.homing || false
+            };
+            showLevelUp(def.icon + ' ' + def.name + '!');
+            spawnParticles(player.x, player.y, def.color, 15, 200, 0.5);
+            sfx.powerup();
+            weaponPickups.splice(i, 1);
+        }
     }
 }
 
@@ -881,7 +921,7 @@ function drawMinimap() {
 
 function drawCrosshair() {
     if (controlMode === 'touch') return;
-    const w = WEAPONS[currentWeaponIdx];
+    const w = getCurrentWeapon();
     ctx.strokeStyle = w.color + '88'; ctx.lineWidth = 1.5;
     const cx = mouse.x, cy = mouse.y, s = 12, g = 5;
     ctx.beginPath();
@@ -895,43 +935,53 @@ function drawCrosshair() {
 }
 
 function drawWeaponBar() {
-    const barW = WEAPONS.length * 56 + 10;
-    const barX = (W - barW) / 2, barY = H - 65;
-    ctx.fillStyle = 'rgba(5,5,20,0.7)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 1;
-    // Background
-    const r = 10;
-    ctx.beginPath();
-    ctx.moveTo(barX + r, barY); ctx.lineTo(barX + barW - r, barY);
-    ctx.quadraticCurveTo(barX + barW, barY, barX + barW, barY + r);
-    ctx.lineTo(barX + barW, barY + 42 - r);
-    ctx.quadraticCurveTo(barX + barW, barY + 42, barX + barW - r, barY + 42);
-    ctx.lineTo(barX + r, barY + 42);
-    ctx.quadraticCurveTo(barX, barY + 42, barX, barY + 42 - r);
-    ctx.lineTo(barX, barY + r);
-    ctx.quadraticCurveTo(barX, barY, barX + r, barY);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-
-    for (let i = 0; i < WEAPONS.length; i++) {
-        const w = WEAPONS[i];
-        const sx = barX + 8 + i * 56, sy = barY + 4, sw = 48, sh = 34;
-        const active = i === currentWeaponIdx;
-        // Slot bg
-        ctx.fillStyle = active ? w.color + '33' : 'rgba(255,255,255,0.03)';
-        ctx.strokeStyle = active ? w.color : 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = active ? 2 : 1;
-        ctx.beginPath();
-        ctx.roundRect(sx, sy, sw, sh, 6);
-        ctx.fill(); ctx.stroke();
-        // Icon
-        ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(w.icon, sx + sw / 2, sy + 13);
-        // Key number
-        ctx.font = 'bold 9px Orbitron'; ctx.fillStyle = active ? w.color : 'rgba(255,255,255,0.35)';
-        ctx.fillText(w.key, sx + sw / 2, sy + 28);
+    // Draw active weapon indicator at bottom center
+    const w = getCurrentWeapon();
+    const label = activeWeaponPU ? activeWeaponPU.icon + ' ' + activeWeaponPU.name : '🔥 SMG';
+    const barW = 180, barH = 36;
+    const barX = (W - barW) / 2, barY = H - 52;
+    ctx.fillStyle = 'rgba(5,5,20,0.75)';
+    ctx.strokeStyle = w.color + '55';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 8); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 12px Orbitron'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = w.color;
+    ctx.fillText(label, W / 2, barY + 13);
+    // Timer bar if weapon power-up active
+    if (activeWeaponPU) {
+        const pct = activeWeaponPU.timer / activeWeaponPU.maxTimer;
+        const tbW = barW - 20, tbH = 5;
+        const tbX = barX + 10, tbY = barY + 25;
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(tbX, tbY, tbW, tbH);
+        ctx.fillStyle = w.color;
+        ctx.fillRect(tbX, tbY, tbW * pct, tbH);
     }
+}
+
+function drawWeaponPickups() {
+    for (const wp of weaponPickups) {
+        const s = toScreen(wp.x, wp.y);
+        if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+        const bob = Math.sin(wp.bobPhase) * 4;
+        const pulse = 0.8 + Math.sin(wp.bobPhase * 1.5) * 0.2;
+        // Glow
+        ctx.globalAlpha = 0.3 * pulse;
+        ctx.fillStyle = wp.wpDef.color;
+        ctx.beginPath(); ctx.arc(s.x, s.y + bob, 18, 0, Math.PI * 2); ctx.fill();
+        // Border
+        ctx.globalAlpha = 0.8;
+        ctx.strokeStyle = wp.wpDef.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y + bob, 14, 0, Math.PI * 2); ctx.stroke();
+        // BG
+        ctx.fillStyle = 'rgba(10,10,30,0.8)';
+        ctx.beginPath(); ctx.arc(s.x, s.y + bob, 13, 0, Math.PI * 2); ctx.fill();
+        // Icon
+        ctx.globalAlpha = 1;
+        ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(wp.wpDef.icon, s.x, s.y + bob);
+    }
+    ctx.globalAlpha = 1;
 }
 
 // ======================== HUD ========================
@@ -981,7 +1031,7 @@ function gameLoop(timestamp) {
 
     drawBackground();
     if (state === 'playing' || state === 'gameover') {
-        drawGems(); drawBullets(); drawEnemies(); drawPlayer();
+        drawWeaponPickups(); drawGems(); drawBullets(); drawEnemies(); drawPlayer();
         drawParticles(); drawMinimap(); drawCrosshair(); drawWeaponBar();
     }
     if (state === 'playing') updateHUD();
