@@ -3,6 +3,12 @@
 // ============================================================
 'use strict';
 
+const GAME_VERSION = 'v1.0.1';
+
+// Init Version Display
+const versionDisplayEl = document.getElementById('version-display');
+if (versionDisplayEl) versionDisplayEl.innerText = GAME_VERSION;
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -1059,6 +1065,7 @@ function drawParticles() {
 }
 
 function drawMinimap() {
+    if (controlMode === 'touch') return;
     const mmSize = 140, mmPad = 20;
     const mmX = W - mmSize - mmPad, mmY = H - mmSize - mmPad, scale = mmSize / WORLD_SIZE;
     ctx.fillStyle = 'rgba(5,5,20,0.7)'; ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
@@ -1150,11 +1157,11 @@ function drawCombo() {
     ctx.textAlign = 'right'; ctx.textBaseline = 'top';
     ctx.globalAlpha = Math.min(1, comboTimer / 0.3);
     ctx.fillStyle = color;
-    ctx.fillText(comboCount + '× COMBO!', W - 20, 80);
+    ctx.fillText(comboCount + '× COMBO!', W - 20, 140);
     if (comboCount >= 5) {
         ctx.font = `bold 12px Orbitron`;
         ctx.fillStyle = '#aaaaaa';
-        ctx.fillText('+' + Math.floor(comboCount * 1.5) + ' pts', W - 20, 80 + size + 4);
+        ctx.fillText('+' + Math.floor(comboCount * 1.5) + ' pts', W - 20, 140 + size + 4);
     }
     ctx.restore();
 }
