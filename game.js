@@ -337,6 +337,10 @@ function startGame() {
     if (controlMode === 'touch') document.getElementById('touch-controls').classList.remove('hidden');
     else document.getElementById('touch-controls').classList.add('hidden');
     updateTouchWeaponLabel();
+    // Request fullscreen
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => { });
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     state = 'playing';
 }
 
