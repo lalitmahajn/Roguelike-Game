@@ -76,10 +76,10 @@ const DASH_DURATION = 0.2;
 const DASH_COOLDOWN = 1.0;
 const GEM_MAGNET_RANGE = 180;
 const GEM_COLLECT_RANGE = 25;
-const MAX_ENEMIES = 80;
+const MAX_ENEMIES = 150;
 const PLAYER_MAX_HP = 100;
-const PLAYER_LIVES = 5;
-const INVULN_TIME = 1.5;
+const PLAYER_LIVES = 3;
+const INVULN_TIME = 0.5;
 
 // ======================== DEFAULT WEAPON (SMG) ========================
 const SMG = {
@@ -127,10 +127,10 @@ const UPGRADE_POOL = [
 
 // Enemy definitions
 const ENEMY_TYPES = {
-    chaser: { hp: 1, speed: 100, size: 14, color: '#ff4455', dmg: 8, score: 10, gemType: 0 },
-    dasher: { hp: 1, speed: 70, size: 12, color: '#ff8800', dmg: 10, score: 20, gemType: 1 },
-    tank: { hp: 5, speed: 55, size: 22, color: '#aa44ff', dmg: 18, score: 50, gemType: 2 },
-    splitter: { hp: 2, speed: 90, size: 16, color: '#44dd66', dmg: 8, score: 30, gemType: 3 },
+    chaser: { hp: 1.5, speed: 105, size: 14, color: '#ff4455', dmg: 12, score: 10, gemType: 0 },
+    dasher: { hp: 1, speed: 85, size: 12, color: '#ff8800', dmg: 15, score: 20, gemType: 1 },
+    tank: { hp: 8, speed: 65, size: 22, color: '#aa44ff', dmg: 25, score: 50, gemType: 2 },
+    splitter: { hp: 3, speed: 100, size: 16, color: '#44dd66', dmg: 12, score: 30, gemType: 3 },
 };
 
 const GEM_COLORS = ['#4488ff', '#44ff88', '#ffcc00', '#cc66ff'];
@@ -385,7 +385,7 @@ function spawnEnemy(type, x, y, isElite = false) {
 }
 
 function updateSpawner(dt) {
-    const rate = 1 + gameTime * 0.025; // Increased from 0.015 for more challenge
+    const rate = 1 + gameTime * 0.04; // Increased for more challenge
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
         spawnTimer = 1 / rate;
@@ -393,7 +393,7 @@ function updateSpawner(dt) {
         if (gameTime > 30) types.push('dasher');
         if (gameTime > 60) types.push('tank');
         if (gameTime > 90) types.push('splitter');
-        const count = Math.min(3, 1 + Math.floor(gameTime / 50)); // Increased enemy count scaling
+        const count = Math.min(5, 1 + Math.floor(gameTime / 40)); // Increased enemy count scaling
         for (let i = 0; i < count; i++) {
             const isEliteRound = (Math.floor(gameTime) % 60 === 0 && Math.random() < 0.2);
             // Spawn warning
@@ -727,7 +727,7 @@ function updateEnemies(dt) {
                 if (player.hp <= 0) {
                     player.lives--;
                     if (player.lives <= 0) { gameOver(); return; }
-                    player.hp = player.maxHp; player.invulnTimer = 2;
+                    player.hp = player.maxHp; player.invulnTimer = 1.0;
                     spawnParticles(player.x, player.y, '#ff3366', 20, 200, 0.6);
                 }
             }
