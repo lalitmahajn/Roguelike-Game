@@ -1,0 +1,10 @@
+{
+  "name": "Neon Survivors",
+  "short_name": "NeonSurvivors",
+  "description": "A fast-paced 2D top-down roguelike shooter",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a0a1a",
+  "theme_color": "#0a0a1a"
+}

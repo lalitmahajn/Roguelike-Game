@@ -339,8 +339,8 @@ function startGame() {
     updateTouchWeaponLabel();
     // Request fullscreen
     const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => { });
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (rfs) try { const p = rfs.call(el); if (p && p.catch) p.catch(() => { }); } catch (e) { }
     state = 'playing';
 }
 
