@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Survivors — Roguelike Shooter</title>
+    <meta name="description"
+        content="A fast-paced 2D top-down roguelike survivor game. Fight waves of enemies, collect gems, and power up to survive!">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="hidden">
+        <div id="hud-top-left">
+            <div id="score-display">
+                <span class="hud-label">SCORE</span>
+                <span id="score-value">0</span>
+            </div>
+            <div id="gems-display">
+                <span class="hud-label">GEMS</span>
+                <span id="gems-value">0</span>
+            </div>
+            <div id="wave-display">
+                <span class="hud-label">WAVE</span>
+                <span id="wave-value">1</span>
+            </div>
+        </div>
+        <div id="hud-top-right">
+            <div id="lives-display">
+                <span class="hud-label">LIVES</span>
+                <div id="lives-icons"></div>
+            </div>
+            <div id="health-bar-container">
+                <div id="health-bar"></div>
+                <span id="health-text"></span>
+            </div>
+        </div>
+        <div id="hud-bottom">
+            <div id="powerup-display"></div>
+        </div>
+        <div id="kill-counter">
+            <span class="hud-label">KILLS</span>
+            <span id="kills-value">0</span>
+        </div>
+        <div id="time-display">
+            <span id="time-value">00:00</span>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <div class="screen-content">
+            <h1 class="game-title">NEON<br><span class="title-accent">SURVIVORS</span></h1>
+            <p class="game-subtitle">Top-Down Roguelike Shooter</p>
+            <div class="controls-info">
+                <div class="control-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span>Move</span></div>
+                <div class="control-row"><span class="mouse-icon">🖱️</span> <span>Aim & Shoot</span></div>
+                <div class="control-row"><kbd>SPACE</kbd> <span>Dash</span></div>
+                <div class="control-row"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd> <span>Switch
+                        Weapon</span></div>
+                <div class="control-row"><kbd>Q</kbd><kbd>E</kbd> / <span>🖱️ Scroll</span> <span>Cycle Weapons</span>
+                </div>
+            </div>
+            <button id="start-btn" class="neon-btn">START GAME</button>
+            <p class="start-hint">Survive the endless waves. Collect gems. Power up. Dominate.</p>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="hidden">
+        <div class="screen-content">
+            <h1 class="gameover-title">GAME OVER</h1>
+            <div class="final-stats">
+                <div class="stat-item">
+                    <span class="stat-label">FINAL SCORE</span>
+                    <span id="final-score" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">ENEMIES KILLED</span>
+                    <span id="final-kills" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">GEMS COLLECTED</span>
+                    <span id="final-gems" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">TIME SURVIVED</span>
+                    <span id="final-time" class="stat-value">00:00</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">WAVE REACHED</span>
+                    <span id="final-wave" class="stat-value">1</span>
+                </div>
+            </div>
+            <button id="restart-btn" class="neon-btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- Level Up Notification -->
+    <div id="levelup-notification" class="hidden">
+        <div class="levelup-content">
+            <span class="levelup-icon">⚡</span>
+            <span id="levelup-text">POWER UP!</span>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+
+</html>
