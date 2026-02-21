@@ -47,11 +47,29 @@
                 <span class="hud-label">WAVE</span>
                 <span id="wave-value">1</span>
             </div>
+            <div id="level-display">
+                <span class="hud-label">LEVEL</span>
+                <span id="level-value">1</span>
+            </div>
+        </div>
+        <div id="hud-top-center">
+            <div id="xp-bar-container">
+                <div id="xp-bar"></div>
+                <span id="xp-text">0/100</span>
+            </div>
+            <div id="ult-bar-container">
+                <div id="ult-bar"></div>
+                <span id="ult-text">ULTIMATE READY</span>
+            </div>
         </div>
         <div id="hud-top-right">
             <div id="lives-display">
                 <span class="hud-label">LIVES</span>
                 <div id="lives-icons"></div>
+            </div>
+            <div id="danger-display">
+                <span class="hud-label">DANGER</span>
+                <span id="danger-value">LEVEL 1</span>
             </div>
             <div id="health-bar-container">
                 <div id="health-bar"></div>
@@ -88,6 +106,10 @@
             <button id="touch-dash-btn" class="touch-btn dash-btn">
                 <span class="touch-btn-icon">💨</span>
                 <span class="touch-btn-label">DASH</span>
+            </button>
+            <button id="touch-ult-btn" class="touch-btn ult-btn">
+                <span class="touch-btn-icon">☢️</span>
+                <span class="touch-btn-label">ULT</span>
             </button>
         </div>
     </div>
@@ -128,6 +150,17 @@
 
             <button id="start-btn" class="neon-btn">START GAME</button>
             <p class="start-hint">Survive the endless waves. Collect gems. Power up. Dominate.</p>
+        </div>
+    </div>
+
+    <!-- Level Up Selection Screen -->
+    <div id="levelup-screen" class="hidden">
+        <div class="screen-content">
+            <h1 class="levelup-title">LEVEL UP!</h1>
+            <p class="levelup-subtitle">Choose an Upgrade</p>
+            <div id="upgrade-options" class="upgrade-grid">
+                <!-- Upgrade cards will be injected here by JS -->
+            </div>
         </div>
     </div>
 

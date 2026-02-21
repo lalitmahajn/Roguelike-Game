@@ -66,9 +66,9 @@ const sfx = {
 const WORLD_SIZE = 4000;
 const PLAYER_SPEED = 220;
 const DASH_SPEED = 700;
-const DASH_DURATION = 0.15;
-const DASH_COOLDOWN = 1.5;
-const GEM_MAGNET_RANGE = 120;
+const DASH_DURATION = 0.2;
+const DASH_COOLDOWN = 1.0;
+const GEM_MAGNET_RANGE = 180;
 const GEM_COLLECT_RANGE = 25;
 const MAX_ENEMIES = 80;
 const PLAYER_MAX_HP = 100;
@@ -94,27 +94,37 @@ const WEAPON_POWERUPS = [
         bulletSize: 3, pierce: true, explosive: false, homing: false
     },
     {
-        id: 'bombs', name: 'Bombs', icon: '�', color: '#ff8800', dur: 8,
-        fireRate: 0.4, bulletSpeed: 450, damage: 1, spread: 0.08, count: 1, lifetime: 1.5,
-        bulletSize: 6, pierce: false, explosive: true, homing: false
+        id: 'bombs', name: 'Plasma Bombs', icon: '💣', color: '#ff8800', dur: 10,
+        fireRate: 0.5, bulletSpeed: 400, damage: 4.0, spread: 0.1, count: 1, lifetime: 1.5,
+        bulletSize: 10, pierce: false, explosive: true, homing: false
     },
 ];
 const WEAPON_DROP_CHANCE = 0.08; // 8% per kill
 
-// Power-up thresholds (stat boosts)
-const POWERUPS = [
-    { gems: 25, type: 'speed', name: 'Speed Boost', icon: '💨', dur: 12, color: '#00ff88' },
-    { gems: 50, type: 'rapid', name: 'Rapid Fire', icon: '🔥', dur: 12, color: '#ff6600' },
-    { gems: 100, type: 'multi', name: 'Multi-Shot', icon: '🔱', dur: 15, color: '#aa66ff' },
-    { gems: 150, type: 'shield', name: 'Shield', icon: '🛡️', dur: 20, color: '#00aaff' },
+// Upgrade Pool
+const UPGRADE_POOL = [
+    { id: 'damage', name: 'Heavy Bullets', desc: '+25% Damage', icon: '💥', type: 'stat' },
+    { id: 'fireRate', name: 'Rapid Fire', desc: '+20% Fire Rate', icon: '🔥', type: 'stat' },
+    { id: 'speed', name: 'Swiftness', desc: '+20% Move Speed', icon: '💨', type: 'stat' },
+    { id: 'magnet', name: 'Magnetism', desc: '+30% Pickup Range', icon: '🧲', type: 'stat' },
+    { id: 'maxHp', name: 'Fortitude', desc: '+25 Max HP & Heal', icon: '❤️', type: 'stat' },
+    { id: 'projectiles', name: 'Extra Barrel', desc: '+1 Projectile (Max 3)', icon: '🔱', type: 'stat' },
+    { id: 'pierce', name: 'Piercing Rounds', desc: 'Bullets pierce +1 enemy (Max 3)', icon: '🏹', type: 'stat' },
+    { id: 'shield', name: 'Neon Shield', desc: 'Gain 1 Shield (Max 3)', icon: '🛡️', type: 'stat' },
+    { id: 'crit', name: 'Cyber-Crit', desc: '+20% Crit Chance', icon: '🎯', type: 'stat' },
+    { id: 'regen', name: 'Nano-Repair', desc: '+3 HP/s Regen', icon: '💉', type: 'stat' },
+    { id: 'blast', name: 'High Explosives', desc: '+40% Blast Radius', icon: '💥', type: 'stat' },
+    { id: 'ultCharge', name: 'Ultimate Boost', desc: '+25% Ultimate Gain', icon: '⚛️', type: 'stat' },
+    { id: 'dashCooldown', name: 'Dash Recharge', desc: '-25% Dash Cooldown', icon: '⚡', type: 'stat' },
+    { id: 'invuln', name: 'Invulnerability', desc: '+0.5s Invuln after hit', icon: '✨', type: 'stat' }
 ];
 
 // Enemy definitions
 const ENEMY_TYPES = {
-    chaser: { hp: 1, speed: 100, size: 14, color: '#ff4455', dmg: 12, score: 10, gemType: 0 },
-    dasher: { hp: 1, speed: 70, size: 12, color: '#ff8800', dmg: 15, score: 20, gemType: 1 },
-    tank: { hp: 5, speed: 55, size: 22, color: '#aa44ff', dmg: 25, score: 50, gemType: 2 },
-    splitter: { hp: 2, speed: 90, size: 16, color: '#44dd66', dmg: 10, score: 30, gemType: 3 },
+    chaser: { hp: 1, speed: 100, size: 14, color: '#ff4455', dmg: 8, score: 10, gemType: 0 },
+    dasher: { hp: 1, speed: 70, size: 12, color: '#ff8800', dmg: 10, score: 20, gemType: 1 },
+    tank: { hp: 5, speed: 55, size: 22, color: '#aa44ff', dmg: 18, score: 50, gemType: 2 },
+    splitter: { hp: 2, speed: 90, size: 16, color: '#44dd66', dmg: 8, score: 30, gemType: 3 },
 };
 
 const GEM_COLORS = ['#4488ff', '#44ff88', '#ffcc00', '#cc66ff'];
@@ -134,6 +144,12 @@ let player, bullets = [], enemies = [], gems = [], particles = [], damageNumbers
 let activePowerups = [];
 let weaponPickups = []; // on-ground weapon power-up items
 let activeWeaponPU = null; // { id, name, icon, color, timer, ... weapon stats }
+
+// Combo system
+let comboCount = 0, comboTimer = 0, comboBest = 0;
+const COMBO_WINDOW = 2.0; // seconds to maintain combo
+
+let spawnWarnings = []; // { x, y, life }
 
 // ======================== CONTROL MODE ========================
 let controlMode = 'keyboard'; // 'keyboard' | 'touch'
@@ -178,9 +194,19 @@ function createPlayer() {
         x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0,
         hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP,
         lives: PLAYER_LIVES, score: 0, gems: 0, kills: 0,
+        level: 1, xp: 0, xpNext: 20,
         angle: 0, fireTimer: 0, invulnTimer: 0,
         dashTimer: 0, dashCooldown: 0, dashAngle: 0,
-        size: 16, speedMult: 1, fireRateMult: 1, multiShot: false, shield: 0,
+        size: 16,
+        // Base multipliers and stats
+        speedMult: 1, fireRateMult: 1, damageMult: 1,
+        bonusProjectiles: 0, bonusPierce: 0, magnetMult: 1,
+        ultCharge: 0, ultMax: 100, ultChargeMult: 1,
+        shield: 0, shieldMax: 0, shieldTimer: 0,
+        critChance: 0.05, regenAmount: 0, regenTimer: 0,
+        blastRadiusMult: 1,
+        dashCooldownMult: 1,
+        invulnBonus: 0,
     };
 }
 
@@ -189,7 +215,7 @@ window.addEventListener('keydown', e => {
     if (controlMode !== 'keyboard') return;
     keys[e.code] = true;
     if (e.code === 'Space') e.preventDefault();
-
+    if (e.code === 'KeyF') useUltimate();
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 canvas.addEventListener('mousemove', e => { if (controlMode === 'keyboard') { mouse.x = e.clientX; mouse.y = e.clientY; } });
@@ -308,8 +334,10 @@ document.getElementById('restart-btn').addEventListener('click', () => { ensureA
 
 function startGame() {
     player = createPlayer();
-    bullets = []; enemies = []; gems = []; particles = []; damageNumbers = []; activePowerups = [];
+    bullets = []; enemies = [], gems = [], particles = [], damageNumbers = []; activePowerups = [];
     weaponPickups = []; activeWeaponPU = null;
+    comboCount = 0; comboTimer = 0; comboBest = 0;
+    spawnWarnings = [];
     gameTime = 0; spawnTimer = 0; waveNum = 1; waveTimer = 0;
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('gameover-screen').classList.add('hidden');
@@ -322,11 +350,19 @@ function startGame() {
         const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
         if (rfs) try { const p = rfs.call(el); if (p && p.catch) p.catch(() => { }); } catch (e) { }
     }
+    // Connect Ultimate Touch Button
+    const ultBtn = document.getElementById('touch-ult-btn');
+    if (ultBtn) {
+        ultBtn.addEventListener('touchstart', e => {
+            e.preventDefault(); e.stopPropagation();
+            useUltimate();
+        });
+    }
     state = 'playing';
 }
 
 // ======================== SPAWN ENEMIES ========================
-function spawnEnemy(type, x, y) {
+function spawnEnemy(type, x, y, isElite = false) {
     if (enemies.length >= MAX_ENEMIES) return;
     const def = ENEMY_TYPES[type];
     if (!x) {
@@ -334,14 +370,16 @@ function spawnEnemy(type, x, y) {
         x = player.x + Math.cos(a) * d; y = player.y + Math.sin(a) * d;
     }
     x = clamp(x, 50, WORLD_SIZE - 50); y = clamp(y, 50, WORLD_SIZE - 50);
+    const size = isElite ? def.size * 2 : def.size;
+    const hp = isElite ? def.hp * 5 : def.hp;
     enemies.push({
-        x, y, vx: 0, vy: 0, hp: def.hp, maxHp: def.hp, type, size: def.size,
-        dashTimer: 0, dashCooldown: rand(1, 3), flashTimer: 0
+        x, y, vx: 0, vy: 0, hp: hp, maxHp: hp, type, size: size,
+        dashTimer: 0, dashCooldown: rand(1, 3), flashTimer: 0, isElite
     });
 }
 
 function updateSpawner(dt) {
-    const rate = 1 + gameTime * 0.01;
+    const rate = 1 + gameTime * 0.025; // Increased from 0.015 for more challenge
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
         spawnTimer = 1 / rate;
@@ -349,11 +387,26 @@ function updateSpawner(dt) {
         if (gameTime > 30) types.push('dasher');
         if (gameTime > 60) types.push('tank');
         if (gameTime > 90) types.push('splitter');
-        const count = Math.min(3, 1 + Math.floor(gameTime / 60));
-        for (let i = 0; i < count; i++) spawnEnemy(types[randInt(0, types.length - 1)]);
+        const count = Math.min(3, 1 + Math.floor(gameTime / 50)); // Increased enemy count scaling
+        for (let i = 0; i < count; i++) {
+            const isEliteRound = (Math.floor(gameTime) % 60 === 0 && Math.random() < 0.2);
+            // Spawn warning
+            const a = rand(0, Math.PI * 2), d = rand(500, 800);
+            const sx = player.x + Math.cos(a) * d, sy = player.y + Math.sin(a) * d;
+            spawnWarnings.push({ x: sx, y: sy, life: 1.0 });
+
+            setTimeout(() => spawnEnemy(types[randInt(0, types.length - 1)], sx, sy, isEliteRound), 500);
+        }
     }
     waveTimer += dt;
     if (waveTimer >= 30) { waveTimer = 0; waveNum++; }
+}
+
+function updateSpawnWarnings(dt) {
+    for (let i = spawnWarnings.length - 1; i >= 0; i--) {
+        spawnWarnings[i].life -= dt;
+        if (spawnWarnings[i].life <= 0) spawnWarnings.splice(i, 1);
+    }
 }
 
 // ======================== PARTICLES ========================
@@ -397,23 +450,31 @@ function getCurrentWeapon() {
 
 function fireBullet() {
     const w = getCurrentWeapon();
-    const baseAngle = getAimAngle();
+    const count = w.count + player.bonusProjectiles;
+    let baseDamage = w.damage * player.damageMult;
+    const isCrit = Math.random() < player.critChance;
+    if (isCrit) baseDamage *= 3;
+    const spread = w.spread;
 
-    for (let i = 0; i < w.count; i++) {
-        let a = baseAngle;
-        if (w.count > 1) {
-            a = baseAngle - w.spread / 2 + (w.spread / (w.count - 1)) * i + rand(-0.03, 0.03);
-        } else if (w.spread > 0) {
-            a += rand(-w.spread, w.spread);
+    for (let i = 0; i < count; i++) {
+        let a = player.angle;
+        if (count > 1) {
+            a = player.angle - (spread * (count - 1)) / 2 + i * spread;
         }
-        if (player.multiShot && w.count === 1) {
-            if (i === 0) { pushBullet(a, w); pushBullet(a - 0.18, w); pushBullet(a + 0.18, w); }
-        } else { pushBullet(a, w); }
+        const s = w.bulletSpeed;
+        bullets.push({
+            x: player.x, y: player.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+            dmg: baseDamage, size: w.bulletSize, life: w.lifetime,
+            pierce: w.pierce ? 10 : player.bonusPierce, bulletId: Math.random(),
+            homing: w.homing || false, weaponId: w.id,
+            color: w.color, hitEnemies: [], isCrit,
+            explosive: w.explosive
+        });
     }
-    if (w.id === 'missiles') sfx.rocket();
+    if (w.id === 'smg') sfx.smg();
+    else if (w.id === 'missiles') sfx.rocket();
     else if (w.id === 'laser') sfx.laser();
-    else if (w.id === 'bombs') { sfx.shotgun(); }
-    else sfx.smg();
+    else if (w.id === 'bombs') sfx.shotgun();
 }
 
 function pushBullet(a, w) {
@@ -428,6 +489,23 @@ function pushBullet(a, w) {
 }
 
 function updatePlayer(dt) {
+    // Regeneration
+    if (player.regenAmount > 0) {
+        player.regenTimer += dt;
+        if (player.regenTimer >= 1.0) {
+            player.hp = Math.min(player.maxHp, player.hp + player.regenAmount);
+            player.regenTimer = 0;
+        }
+    }
+    // Shield recharge
+    if (player.shieldMax > 0 && player.shield < player.shieldMax) {
+        player.shieldTimer += dt;
+        if (player.shieldTimer >= 5.0) { // Recharge 1 shield every 5s if not already full
+            player.shield++;
+            player.shieldTimer = 0;
+        }
+    }
+
     let mx = 0, my = 0;
     if (controlMode === 'touch') {
         mx = joystick.dx; my = joystick.dy;
@@ -445,7 +523,7 @@ function updatePlayer(dt) {
     const dashPressed = controlMode === 'touch' ? touchDashDown : keys['Space'];
     player.dashCooldown -= dt;
     if (dashPressed && player.dashCooldown <= 0 && (mx || my)) {
-        player.dashTimer = DASH_DURATION; player.dashCooldown = DASH_COOLDOWN;
+        player.dashTimer = DASH_DURATION; player.dashCooldown = DASH_COOLDOWN * player.dashCooldownMult;
         player.dashAngle = Math.atan2(my, mx);
         spawnParticles(player.x, player.y, '#00ffff', 8, 150, 0.3);
         sfx.dash();
@@ -455,6 +533,7 @@ function updatePlayer(dt) {
         player.dashTimer -= dt;
         player.x += Math.cos(player.dashAngle) * DASH_SPEED * dt;
         player.y += Math.sin(player.dashAngle) * DASH_SPEED * dt;
+        player.invulnTimer = Math.max(player.invulnTimer, 0.05); // invuln during dash
     } else {
         player.x += mx * speed * dt; player.y += my * speed * dt;
     }
@@ -497,7 +576,7 @@ function updateBullets(dt) {
         b.x += b.vx * dt; b.y += b.vy * dt;
         b.life -= dt;
         if (b.life <= 0 || b.x < 0 || b.x > WORLD_SIZE || b.y < 0 || b.y > WORLD_SIZE) {
-            if (b.explosive) explode(b.x, b.y);
+            if (b.explosive) explode(b.x, b.y, b.dmg);
             bullets.splice(i, 1); continue;
         }
         let hit = false;
@@ -506,12 +585,18 @@ function updateBullets(dt) {
             if (b.hitEnemies.includes(j)) continue;
             if (dist(b, e) < e.size + b.size) {
                 e.hp -= b.dmg; e.flashTimer = 0.1;
+                // Knockback
+                const ka = Math.atan2(b.vy, b.vx);
+                e.x += Math.cos(ka) * 6; e.y += Math.sin(ka) * 6;
                 spawnParticles(b.x, b.y, ENEMY_TYPES[e.type].color, 4, 100, 0.3);
-                spawnDamageNumber(e.x, e.y - e.size, b.dmg, '#ffffff');
+                spawnDamageNumber(e.x, e.y - e.size, b.dmg, b.isCrit ? '#ffff00' : '#ffffff');
                 sfx.hit();
-                if (b.pierce) { b.hitEnemies.push(j); }
-                else if (b.explosive) { explode(b.x, b.y); hit = true; }
-                else { hit = true; }
+                if (b.explosive) explode(b.x, b.y, b.dmg);
+                if (b.hitEnemies.length < b.pierce) {
+                    b.hitEnemies.push(j);
+                } else {
+                    hit = true;
+                }
                 if (e.hp <= 0) killEnemy(j);
                 if (hit) break;
             }
@@ -520,18 +605,18 @@ function updateBullets(dt) {
     }
 }
 
-function explode(x, y) {
+function explode(x, y, dmg) {
+    dmg = dmg || 4;
     sfx.explode();
-    spawnParticles(x, y, '#ff4400', 20, 250, 0.5);
-    spawnParticles(x, y, '#ffcc00', 10, 180, 0.4);
-    screenShake.intensity = 10;
-    // AoE damage
-    const RADIUS = 80;
+    spawnParticles(x, y, '#ff4400', 30, 300, 0.6);
+    spawnParticles(x, y, '#ff8800', 20, 200, 0.5);
+    screenShake.intensity = 15;
+    const RADIUS = 160 * player.blastRadiusMult; // Increased from 120
     for (let j = enemies.length - 1; j >= 0; j--) {
         const e = enemies[j];
         if (dist({ x, y }, e) < RADIUS) {
-            e.hp -= 2; e.flashTimer = 0.15;
-            spawnDamageNumber(e.x, e.y - e.size, 2, '#ff8800');
+            e.hp -= dmg; e.flashTimer = 0.15;
+            spawnDamageNumber(e.x, e.y - e.size, dmg, '#ff8800');
             if (e.hp <= 0) killEnemy(j);
         }
     }
@@ -545,12 +630,22 @@ function killEnemy(idx) {
     spawnParticles(e.x, e.y, def.color, 12, 180, 0.5);
     screenShake.intensity = 4;
     sfx.kill();
+    // Ultimate charge
+    player.ultCharge = Math.min(player.ultMax, player.ultCharge + (def.score / 5) * player.ultChargeMult);
+
     gems.push({
         x: e.x + rand(-10, 10), y: e.y + rand(-10, 10), type: def.gemType, life: 30,
         bobPhase: rand(0, Math.PI * 2), sparkle: 0
     });
-    // Chance to drop weapon power-up
-    if (Math.random() < WEAPON_DROP_CHANCE && !activeWeaponPU) {
+    // Combo tracking
+    comboCount++; comboTimer = COMBO_WINDOW;
+    if (comboCount > comboBest) comboBest = comboCount;
+    if (comboCount >= 3) {
+        const bonus = Math.floor(comboCount * 1.5);
+        player.score += bonus;
+    }
+    // Chance to drop weapon power-up (allow even if PU active, cap 3 on ground)
+    if (Math.random() < WEAPON_DROP_CHANCE && weaponPickups.length < 3) {
         const wp = WEAPON_POWERUPS[randInt(0, WEAPON_POWERUPS.length - 1)];
         weaponPickups.push({
             x: e.x, y: e.y, wpDef: wp, life: 15,
@@ -561,6 +656,30 @@ function killEnemy(idx) {
         for (let k = 0; k < 2; k++) spawnEnemy('chaser', e.x + rand(-30, 30), e.y + rand(-30, 30));
     }
     enemies.splice(idx, 1);
+}
+
+function useUltimate() {
+    if (player.ultCharge < player.ultMax) return;
+    player.ultCharge = 0;
+    sfx.explode();
+    screenShake.intensity = 30;
+    spawnParticles(player.x, player.y, '#ff00ff', 50, 400, 1.0);
+
+    // Nuke all enemies on screen
+    const victims = enemies.filter(e => {
+        const p = toScreen(e.x, e.y);
+        return p.x > -50 && p.x < W + 50 && p.y > -50 && p.y < H + 50;
+    });
+
+    victims.forEach(e => {
+        const idx = enemies.indexOf(e);
+        if (idx !== -1) {
+            e.hp -= 10; e.flashTimer = 0.3;
+            if (e.hp <= 0) killEnemy(idx);
+        }
+    });
+
+    showLevelUp('SUPER NOVA! ☢️');
 }
 
 function updateEnemies(dt) {
@@ -585,25 +704,38 @@ function updateEnemies(dt) {
         if (player.invulnTimer <= 0 && dist(e, player) < e.size + player.size) {
             if (player.shield > 0) {
                 player.shield--;
-                spawnParticles(player.x, player.y, '#00aaff', 8, 150, 0.4);
+                player.shieldTimer = 0; // Reset recharge timer on hit
+                player.invulnTimer = 0.5 + player.invulnBonus;
+                sfx.hit();
+                spawnParticles(player.x, player.y, '#00ffff', 15, 200, 0.5);
                 spawnDamageNumber(player.x, player.y - 20, 'BLOCKED', '#00aaff');
             } else {
                 player.hp -= def.dmg;
+                player.invulnTimer = INVULN_TIME + player.invulnBonus;
+                const ka = angle(e, player);
+                player.x += Math.cos(ka) * 40; player.y += Math.sin(ka) * 40;
+                sfx.hurt();
                 spawnParticles(player.x, player.y, '#ff3366', 10, 150, 0.4);
                 spawnDamageNumber(player.x, player.y - 20, def.dmg, '#ff3366');
                 screenShake.intensity = 8;
-                sfx.hurt();
-            }
-            player.invulnTimer = INVULN_TIME;
-            const ka = angle(e, player);
-            player.x += Math.cos(ka) * 40; player.y += Math.sin(ka) * 40;
-            if (player.hp <= 0) {
-                player.lives--;
-                if (player.lives <= 0) { gameOver(); return; }
-                player.hp = player.maxHp; player.invulnTimer = 2;
-                spawnParticles(player.x, player.y, '#ff3366', 20, 200, 0.6);
+                if (player.hp <= 0) {
+                    player.lives--;
+                    if (player.lives <= 0) { gameOver(); return; }
+                    player.hp = player.maxHp; player.invulnTimer = 2;
+                    spawnParticles(player.x, player.y, '#ff3366', 20, 200, 0.6);
+                }
             }
         }
+    }
+}
+
+function addXP(amount) {
+    player.xp += amount;
+    if (player.xp >= player.xpNext) {
+        player.xp -= player.xpNext;
+        player.level++;
+        player.xpNext = Math.floor(player.xpNext * 1.3) + 10;
+        levelUp();
     }
 }
 
@@ -613,57 +745,82 @@ function updateGems(dt) {
         g.life -= dt; g.bobPhase += dt * 3; g.sparkle += dt;
         if (g.life <= 0) { gems.splice(i, 1); continue; }
         const d = dist(g, player);
-        if (d < GEM_MAGNET_RANGE) {
-            const a = angle(g, player), pull = (1 - d / GEM_MAGNET_RANGE) * 400;
+        const magnetRange = GEM_MAGNET_RANGE * player.magnetMult;
+        if (d < magnetRange) {
+            const a = angle(g, player), pull = (1 - d / magnetRange) * 500;
             g.x += Math.cos(a) * pull * dt; g.y += Math.sin(a) * pull * dt;
         }
         if (d < GEM_COLLECT_RANGE) {
-            player.gems += GEM_VALUES[g.type]; player.score += GEM_VALUES[g.type] * 5;
+            const xpVal = GEM_VALUES[g.type];
+            player.gems += xpVal; player.score += xpVal * 5;
+            addXP(xpVal);
             spawnParticles(g.x, g.y, GEM_COLORS[g.type], 6, 80, 0.3);
             sfx.gem();
             gems.splice(i, 1);
-            checkPowerups();
         }
     }
 }
 
-function checkPowerups() {
-    for (const pu of POWERUPS) {
-        if (player.gems >= pu.gems && !activePowerups.find(a => a.type === pu.type && a.threshold === pu.gems)) {
-            activatePowerup(pu);
-        }
-    }
-    const repeat = Math.floor((player.gems - 200) / 200);
-    if (repeat >= 0) {
-        const key = 'repeat_' + repeat;
-        if (!activePowerups.find(a => a.key === key)) {
-            activatePowerup(POWERUPS[randInt(0, POWERUPS.length - 1)], key);
-        }
-    }
-}
-
-function activatePowerup(pu, key) {
-    activePowerups.push({
-        type: pu.type, name: pu.name, icon: pu.icon, color: pu.color,
-        timer: pu.dur, maxTimer: pu.dur, threshold: pu.gems, key: key || null
-    });
-    applyPowerup(pu.type, true);
-    showLevelUp(pu.name + '!');
-    spawnParticles(player.x, player.y, pu.color, 20, 200, 0.6);
+function levelUp() {
+    state = 'levelup';
     sfx.powerup();
+    const screen = document.getElementById('levelup-screen');
+    const container = document.getElementById('upgrade-options');
+    container.innerHTML = '';
+    screen.classList.remove('hidden');
+
+    // Pick 3 unique upgrades
+    const choices = [];
+    const pool = [...UPGRADE_POOL];
+    for (let i = 0; i < 3; i++) {
+        if (pool.length === 0) break;
+        const idx = randInt(0, pool.length - 1);
+        choices.push(pool.splice(idx, 1)[0]);
+    }
+
+    choices.forEach(u => {
+        const card = document.createElement('div');
+        card.className = 'upgrade-card';
+        card.innerHTML = `
+            <div class="upgrade-icon">${u.icon}</div>
+            <div class="upgrade-name">${u.name}</div>
+            <div class="upgrade-description">${u.desc}</div>
+        `;
+        card.addEventListener('click', () => selectUpgrade(u.id));
+        container.appendChild(card);
+    });
 }
 
-function applyPowerup(type, on) {
-    if (type === 'speed') player.speedMult = on ? 1.4 : 1;
-    if (type === 'rapid') player.fireRateMult = on ? 2 : 1;
-    if (type === 'multi') player.multiShot = on;
-    if (type === 'shield' && on) player.shield = 3;
+function selectUpgrade(id) {
+    if (id === 'damage') player.damageMult *= 1.25;
+    if (id === 'fireRate') player.fireRateMult *= 1.20;
+    if (id === 'speed') player.speedMult *= 1.20;
+    if (id === 'magnet') player.magnetMult *= 1.3;
+    if (id === 'maxHp') {
+        player.maxHp += 25;
+        player.hp = player.maxHp;
+    }
+    if (id === 'projectiles') player.bonusProjectiles = Math.min(3, player.bonusProjectiles + 1);
+    if (id === 'pierce') player.bonusPierce = Math.min(3, player.bonusPierce + 1);
+    if (id === 'shield') {
+        player.shieldMax = Math.min(3, player.shieldMax + 1);
+        player.shield = player.shieldMax;
+    }
+    if (id === 'crit') player.critChance += 0.20;
+    if (id === 'regen') player.regenAmount += 3;
+    if (id === 'blast') player.blastRadiusMult *= 1.4;
+    if (id === 'ultCharge') player.ultChargeMult *= 1.25;
+    if (id === 'dashCooldown') player.dashCooldownMult *= 0.75;
+    if (id === 'invuln') player.invulnBonus += 0.5;
+
+    document.getElementById('levelup-screen').classList.add('hidden');
+    state = 'playing';
 }
 
 function updatePowerups(dt) {
     for (let i = activePowerups.length - 1; i >= 0; i--) {
         const p = activePowerups[i]; p.timer -= dt;
-        if (p.timer <= 0) { applyPowerup(p.type, false); activePowerups.splice(i, 1); }
+        if (p.timer <= 0) { activePowerups.splice(i, 1); }
     }
     // Weapon power-up timer
     if (activeWeaponPU) {
@@ -981,13 +1138,80 @@ function drawWeaponPickups() {
     ctx.globalAlpha = 1;
 }
 
+function drawCombo() {
+    if (comboCount < 3) return;
+    const scale = 1 + Math.sin(comboTimer * 8) * 0.08;
+    const size = Math.min(28, 16 + comboCount) * scale;
+    let color = '#ffdd00';
+    if (comboCount >= 10) color = '#ff44aa';
+    if (comboCount >= 20) color = '#ffffff';
+    ctx.save();
+    ctx.font = `bold ${Math.floor(size)}px Orbitron`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.globalAlpha = Math.min(1, comboTimer / 0.3);
+    ctx.fillStyle = color;
+    ctx.fillText(comboCount + '× COMBO!', W - 20, 80);
+    if (comboCount >= 5) {
+        ctx.font = `bold 12px Orbitron`;
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillText('+' + Math.floor(comboCount * 1.5) + ' pts', W - 20, 80 + size + 4);
+    }
+    ctx.restore();
+}
+
+function drawSpawnWarnings() {
+    ctx.save();
+    for (const w of spawnWarnings) {
+        const p = toScreen(w.x, w.y);
+        if (p.x > 0 && p.x < W && p.y > 0 && p.y < H) continue;
+
+        const edgeX = clamp(p.x, 20, W - 20);
+        const edgeY = clamp(p.y, 20, H - 20);
+        const a = Math.atan2(p.y - edgeY, p.x - edgeX);
+
+        ctx.globalAlpha = Math.sin(w.life * 15) * 0.5 + 0.5;
+        ctx.fillStyle = '#ff3300';
+        ctx.translate(edgeX, edgeY);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(-15, -8); ctx.lineTo(-15, 8);
+        ctx.closePath(); ctx.fill();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    ctx.restore();
+}
+
 // ======================== HUD ========================
 function updateHUD() {
     document.getElementById('score-value').textContent = player.score;
     document.getElementById('gems-value').textContent = player.gems;
     document.getElementById('wave-value').textContent = waveNum;
+    document.getElementById('level-value').textContent = player.level;
     document.getElementById('kills-value').textContent = player.kills;
     document.getElementById('time-value').textContent = formatTime(gameTime);
+
+    // XP Bar
+    const xpPct = (player.xp / player.xpNext) * 100;
+    document.getElementById('xp-bar').style.width = xpPct + '%';
+    document.getElementById('xp-text').textContent = `${Math.floor(player.xp)} / ${player.xpNext}`;
+
+    // Ultimate Bar
+    const ultPct = (player.ultCharge / player.ultMax) * 100;
+    const ultBarCont = document.getElementById('ult-bar-container');
+    const ultBar = document.getElementById('ult-bar');
+    ultBar.style.width = ultPct + '%';
+    if (ultPct >= 100) {
+        ultBarCont.classList.add('charged');
+    } else {
+        ultBarCont.classList.remove('charged');
+    }
+
+    // Danger Level
+    const dangerLevel = 1 + Math.floor(gameTime / 60);
+    document.getElementById('danger-value').textContent = `LVL ${dangerLevel}`;
+    const dangerDisplay = document.getElementById('danger-display');
+    if (dangerLevel > 3) dangerDisplay.style.borderColor = '#ff4400';
+    if (dangerLevel > 6) dangerDisplay.style.borderColor = '#ff0000';
 
     const livesEl = document.getElementById('lives-icons');
     livesEl.innerHTML = '';
@@ -1021,17 +1245,20 @@ function gameLoop(timestamp) {
 
     if (state === 'playing') {
         gameTime += dt;
+        // Combo decay
+        if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) comboCount = 0; }
         updatePlayer(dt); updateBullets(dt); updateEnemies(dt);
         updateGems(dt); updatePowerups(dt); updateParticles(dt);
-        updateSpawner(dt); updateCamera();
+        updateSpawner(dt); updateSpawnWarnings(dt); updateCamera();
     }
 
     drawBackground();
-    if (state === 'playing' || state === 'gameover') {
+    if (state === 'playing' || state === 'levelup' || state === 'gameover') {
         drawWeaponPickups(); drawGems(); drawBullets(); drawEnemies(); drawPlayer();
         drawParticles(); drawMinimap(); drawCrosshair(); drawWeaponBar();
+        drawCombo(); drawSpawnWarnings();
     }
-    if (state === 'playing') updateHUD();
+    if (state !== 'menu') updateHUD();
     if (state === 'menu') drawMenuDecor();
 }
 
