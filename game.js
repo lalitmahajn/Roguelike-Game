@@ -155,9 +155,13 @@ window.addEventListener('resize', resize);
 resize();
 
 // ======================== LANDSCAPE LOCK ========================
+function isMobileDevice() {
+    return navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+}
 function checkOrientation() {
     const lock = document.getElementById('landscape-lock');
-    if (controlMode === 'touch' && window.innerHeight > window.innerWidth && window.innerWidth < 800) {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if (controlMode === 'touch' && isPortrait && isMobileDevice()) {
         lock.classList.remove('hidden');
     } else {
         lock.classList.add('hidden');
@@ -313,8 +317,9 @@ btnTouch.addEventListener('click', () => {
     checkOrientation();
 });
 
-// Auto-detect mobile
-if ('ontouchstart' in window && window.innerWidth < 1024) {
+// Auto-detect mobile — check user agent for phone/tablet AND touch support
+const isMobile = isMobileDevice() && /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+if (isMobile) {
     btnTouch.click();
 }
 
